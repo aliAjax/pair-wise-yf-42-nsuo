@@ -54,6 +54,10 @@ class SQLiteRepository:
                     created_at TEXT NOT NULL,
                     PRIMARY KEY(actor_id, idem_key)
                 );
+                CREATE TABLE IF NOT EXISTS meta (
+                    key TEXT PRIMARY KEY,
+                    value TEXT NOT NULL
+                );
             """)
 
     @staticmethod
@@ -139,6 +143,44 @@ class SQLiteRepository:
         finally:
             connection.close()
         return self.get_entity(entity_id)
+
+    def rewrite_entity(self, entity_id, data, status=None):
+        """Overwrite stored data without bumping version or timestamps.
+
+        Used for system-computed fields (e.g. backfilled coefficients) that
+        must not make stored pedigree snapshots appear stale.
+        """
+        payload = json.dumps(data, ensure_ascii=False, sort_keys=True)
+        with self._connect() as connection:
+            if status is not None:
+                connection.execute(
+                    "UPDATE entities SET data = ?, status = ? WHERE id = ?",
+                    (payload, status, entity_id),
+                )
+            else:
+                connection.execute(
+                    "UPDATE entities SET data = ? WHERE id = ?",
+                    (payload, entity_id),
+                )
+        return self.get_entity(entity_id)
+
+    def get_meta(self, key):
+        with self._connect() as connection:
+            row = connection.execute(
+                "SELECT value FROM meta WHERE key = ?", (key,)
+            ).fetchone()
+        return row["value"] if row else None
+
+    def set_meta(self, key, value):
+        with self._connect() as connection:
+            connection.execute(
+                "INSERT OR REPLACE INTO meta(key, value) VALUES (?, ?)",
+                (key, value),
+            )
+
+    def delete_meta(self, key):
+        with self._connect() as connection:
+            connection.execute("DELETE FROM meta WHERE key = ?", (key,))
 
     def append_audit(self, entity_id, actor_id, actor_role, action, from_status, to_status, detail):
         with self._connect() as connection:

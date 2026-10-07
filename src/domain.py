@@ -23,6 +23,14 @@ class ConflictError(DomainError):
     """A version or uniqueness constraint was violated."""
 
 
+class PedigreeVersionConflict(ConflictError):
+    """Approval was submitted against a pedigree version that has changed."""
+
+    def __init__(self, message, mismatches=None):
+        super().__init__(message)
+        self.mismatches = mismatches or {}
+
+
 class InvalidTransition(DomainError):
     """The requested state transition is not valid."""
 
