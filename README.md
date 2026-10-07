@@ -24,7 +24,16 @@ python3 app.py --db ./data.db --port 8308
 
 ## 核心对象
 
-- `animal`：个体谱系；`pairing`：配对建议；`transfer`：机构和运输记录。
+- `animal`：个体谱系（含 `sire_id`/`dam_id` 父母链，可沿多代祖先回溯）；`pairing`：配对建议；`transfer`：机构和运输记录。
+
+## 谱系校正与繁育审批
+
+- 录入员（`registrar`）可通过 `POST /api/entities/<id>/actions` 提交 `{"action":"correct_pedigree","data":{"sire_id":...,"dam_id":...},"expected_version":数字}` 更正父母或祖父母。更正会校验血缘存在、性别、不自交、不成环，并触发重算。
+- 近交系数按 Wright 亲缘系数沿多代祖先递归计算：`F = 0.5 * r(sire, dam)`，`r` 为父母间的亲缘系数，自动计入近交祖先的 `(1 + F_A)`，可正确处理自交、回交、全/半同胞、叔侄、表亲等。
+- 血统更正后，系统重算所有 `proposed`（待审）和 `approved`（已批准）配对建议：超阈值（`INBREEDING_THRESHOLD = 0.125`）的已批准建议退回 `proposed` 待审；`completed`（已完成）或动物已运输（`in_transit`/`completed`）的保留原判定。
+- 审批时按提交那一刻的血统版本再核：若配对记录的父母或近交系数快照与当前血统对不上，返回 `409` 退回重新确认；超阈值的不予批准。
+- 两人同时提交同一只动物的校正时，以后到者的 `expected_version` 做乐观锁校验，版本不符返回 `409`；重算始终读取最新已提交血统。
+- 服务启动时自动执行 `backfill_coefficients()`，为缺少系数的旧配对数据按现存血统补齐近交系数。
 
 ## 主要接口
 
@@ -45,4 +54,4 @@ python3 -m unittest discover -s tests -v
 
 ## 局限
 
-谱系系数是简化亲缘规则，不替代专业谱系软件、遗传咨询或法定动物运输许可。
+谱系系数为标准 Wright 亲缘模型，仍不替代专业谱系软件、遗传咨询或法定动物运输许可。

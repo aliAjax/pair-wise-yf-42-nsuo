@@ -19,6 +19,11 @@ def main(argv=None):
     repository = SQLiteRepository(args.db)
     rules = RuleEngine()
     service = DomainService(repository, rules)
+    # 旧数据升级后，按现存血统补齐配对建议的近交系数
+    try:
+        service.backfill_coefficients()
+    except Exception:
+        pass
     static_dir = Path(__file__).resolve().parent / "static"
     server = create_server(args.host, args.port, service, rules, str(static_dir))
 
